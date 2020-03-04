@@ -1,0 +1,280 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="X-UA-Compatible" content="ie=edge">
+    <title>Pomodoro Clock</title>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.12.1/css/all.min.css" rel="stylesheet">
+</head>
+
+<body>
+    <div id="root"></div>
+
+    <style>
+        :root {
+            --blue: rgb(100, 100, 150);
+            --grey: rgb(50, 50, 50);
+        }
+
+        body {
+            height: 100vh;
+            background: linear-gradient(to top left, var(--blue) 0%, black 100%);
+        }
+
+        #root {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: white;
+            padding: 10px;
+            border: 5px solid var(--grey);
+        }
+
+        #pomodoro {
+            display: grid;
+            grid-template-columns: repeat(2, 155px);
+            gap: 10px;
+        }
+
+        .title {
+            color: white;
+            text-align: center;
+            font-weight: bold;
+            background: linear-gradient(to top left, black, var(--blue));
+            margin: 5px 0;
+            border-radius: 10px;
+        }
+
+        .row-container {
+            display: flex;
+            flex-direction: row;
+            justify-content: space-around;
+            margin: 5px;
+        }
+
+        .column-container {
+            display: flex;
+            flex-direction: column;
+            margin: 5px;
+        }
+
+        .column-container>button {
+            margin: 2px 0;
+        }
+
+        #clock {
+            color: white;
+            font-size: 2em;
+            font-weight: bold;
+            text-align: center;
+            background: linear-gradient(to top left, var(--blue), black);
+            border-radius: 100%;
+            border: 5px solid var(--grey);
+            padding: 35px 20px;
+            cursor: pointer;
+        }
+
+        button {
+            color: white;
+            border: none;
+            padding: 2px;
+            background: var(--grey);
+            border: 1px solid var(--blue);
+        }
+
+        button:hover {
+            background: linear-gradient(to top left, var(--blue), grey 25%);
+        }
+
+        #break-length::after,
+        #session-length::after {
+            content: " min";
+        }
+    </style>
+
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/react/16.13.0/umd/react.production.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/16.13.0/umd/react-dom.production.min.js"></script>
+
+    <script type="text/babel">
+        const defaultState = {
+            // time in mm or mm:ss format
+            minLength: "1",
+            maxLength: "60",
+            breakLength: "5",
+            sessionLength: "25",
+            timeLeft: "25:00",
+            beep: "./BeepSound.wav",
+            break: false,
+            running: false,
+            timer: ""
+        }
+
+        class Pomodoro extends React.Component {
+            constructor(props) {
+                super(props);
+                this.state = Object.assign(defaultState);
+                this.timeToSeconds = this.timeToSeconds.bind(this);
+                this.secondsToTime = this.secondsToTime.bind(this);
+                this.reset = this.reset.bind(this);
+                this.breakAdjustment = this.breakAdjustment.bind(this);
+                this.sessionAdjustment = this.sessionAdjustment.bind(this);
+                this.tick = this.tick.bind(this);
+                this.startStop = this.startStop.bind(this);
+                this.switch = this.switch.bind(this);
+            }
+
+            timeToSeconds(timeStr) {
+                // Converts mm or mm:ss to seconds
+                if (timeStr.toString().indexOf(":") > -1) {
+                    const timeArr = timeStr.split(":");
+                    return (Number(timeArr[0]) * 60) + Number(timeArr[1]);
+                } else {
+                    return Number(timeStr) * 60;
+                }
+            }
+
+            secondsToTime(secs) {
+                // Converts seconds to mm:ss
+                const minutes = Math.floor(secs / 60);
+                const seconds = secs % 60;
+                let result = "00:00";
+
+                if (!minutes && !seconds) {
+                    return result;
+                } else {
+                    if (minutes === 0) {
+                        result = "00:";
+                    } else if (minutes < 10) {
+                        result = "0" + minutes + ":";
+                    } else {
+                        result = minutes + ":";
+                    }
+                    if (seconds === 0) {
+                        result += "00";
+                    } else if (seconds < 10) {
+                        result += "0" + seconds;
+                    } else {
+                        result += seconds;
+                    }
+                }
+
+                return result;
+            }
+
+            reset() {
+                const audio = document.querySelector("#beep");
+                audio.currentTime = 0;
+                if (this.state.running) {
+                    clearInterval(this.state.timer);
+                }
+                this.setState(defaultState);
+            }
+
+            breakAdjustment(e) {
+                const target = (e.target.id !== "") ? e.target : e.target.parentNode;
+                if (target.id === "break-increment") {
+                    if (Number(this.state.breakLength) + 1 <= Number(this.state.maxLength)) {
+                        this.setState({ breakLength: Number(this.state.breakLength) + 1 });
+                    }
+                } else {
+                    if (Number(this.state.breakLength) - 1 >= Number(this.state.minLength)) {
+                        this.setState({ breakLength: Number(this.state.breakLength) - 1 });
+                    }
+                }
+            }
+
+            sessionAdjustment(e) {
+                const target = (e.target.id !== "") ? e.target : e.target.parentNode;
+                if (target.id === "session-increment") {
+                    if (Number(this.state.sessionLength) + 1 <= Number(this.state.maxLength)) {
+                        this.setState({ sessionLength: Number(this.state.sessionLength) + 1 });
+                    }
+                } else {
+                    if (Number(this.state.sessionLength) - 1 >= Number(this.state.minLength)) {
+                        this.setState({ sessionLength: Number(this.state.sessionLength) - 1 });
+                    }
+                }
+            }
+
+            tick() {
+                // Updates display every second when clock is running
+                let seconds = this.timeToSeconds(this.state.timeLeft);
+                if (!seconds) {
+                    const audio = document.querySelector("#beep");
+                    audio.currentTime = 0;
+                    audio.play();
+                    this.setState(() => {
+                        return ({
+                            break: !this.state.break,
+                            timeLeft: (this.state.break) ? this.secondsToTime(this.timeToSeconds(this.state.sessionLength)) : this.secondsToTime(this.timeToSeconds(this.state.breakLength))
+                        });
+                    });
+                } else {
+                    this.setState({ timeLeft: this.secondsToTime(seconds - 1) });
+                }
+            }
+
+            startStop() {
+                // Start/stop running timer
+                if (this.state.running) {
+                    clearInterval(this.state.timer);
+                    this.setState({ running: false });
+                } else {
+                    this.setState({ running: true, timer: setInterval(this.tick, 1000) });
+                }
+            }
+
+            switch() {
+                // Toggle break/session while running, or reset clock
+                if (this.state.running) {
+                    this.setState({
+                        break: !this.state.break,
+                        timeLeft: (this.state.break) ? this.secondsToTime(this.timeToSeconds(this.state.sessionLength)) : this.secondsToTime(this.timeToSeconds(this.state.breakLength))
+                    });
+                } else {
+                    this.setState({
+                        timeLeft: (this.state.break) ? this.secondsToTime(this.timeToSeconds(this.state.breakLength)) : this.secondsToTime(this.timeToSeconds(this.state.sessionLength))
+                    });
+                }
+            }
+
+            render() {
+                return (
+                    <div id="pomodoro">
+                        <div id="controls">
+                            <div className="title" id="break-label">Break Length</div>
+                            <div className="row-container">
+                                <button onClick={this.breakAdjustment} id="break-decrement"><i className="fas fa-arrow-down"></i></button>
+                                <span id="break-length">{this.state.breakLength}</span>
+                                <button onClick={this.breakAdjustment} id="break-increment"><i className="fas fa-arrow-up"></i></button>
+                            </div>
+                            <div className="title" id="session-label">Session Length</div>
+                            <div className="row-container">
+                                <button onClick={this.sessionAdjustment} id="session-decrement"><i className="fas fa-arrow-down"></i></button>
+                                <span id="session-length">{this.state.sessionLength}</span>
+                                <button onClick={this.sessionAdjustment} id="session-increment"><i className="fas fa-arrow-up"></i></button>
+                            </div>
+                            <div className="column-container">
+                                <button onClick={this.startStop} id="start_stop"><i className={(this.state.running) ? "fas fa-stop" : "fas fa-play"}></i> {(this.state.running) ? "Stop" : "Start"}</button>
+                                <button onClick={this.reset} id="reset"><i className="fas fa-sync"></i> Reset</button>
+                            </div>
+                        </div>
+                        <div onClick={this.switch} id="clock">
+                            <div id="timer-label">{(this.state.break) ? "Break" : "Session"}</div>
+                            <div id="time-left">{this.state.timeLeft}</div>
+                        </div>
+                        <audio preload="auto" src={this.state.beep} id="beep"></audio>
+                    </div>
+                )
+            }
+        }
+
+        ReactDOM.render(<Pomodoro />, document.querySelector("#root"));
+    </script>
+</body>
+
+</html>
